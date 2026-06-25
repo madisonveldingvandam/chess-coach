@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: chess-coach-bodega-ben
+    runtime: docker
+    plan: free
+    region: oregon
+    branch: main
+    healthCheckPath: /api/health
+    autoDeployTrigger: commit
+    envVars:
+      - key: CHESS_COACH_DATA_DIR
+        value: /tmp/chess-coach-data

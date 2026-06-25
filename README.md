@@ -110,3 +110,12 @@ uv run uvicorn chess_coach.main:app --port 8000
 ```
 
 Then open <http://localhost:8000>.
+
+## Deploy
+
+The repo includes Docker and Render Blueprint config for a public FastAPI
+deployment:
+
+<https://render.com/deploy?repo=https://github.com/madisonveldingvandam/chess-coach-bodega-ben>
+
+See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).

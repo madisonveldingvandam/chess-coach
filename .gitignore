@@ -4,6 +4,8 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+build/
+*.egg-info/
 
 # Runtime-owned cache/results. Keep the directories documented, not the data.
 data/*
