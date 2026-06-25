@@ -119,20 +119,22 @@ if (!app) {
   throw new Error('Missing app root');
 }
 
-let board: any = null;
+let dashboardBoards: Partial<Record<'white' | 'black', any>> = {};
 let entryBoard: any = null;
 let activePayload: DashboardPayload | null = null;
 
 app.innerHTML = `
-  <header class="topbar">
-    <div class="brand">
-      <div class="brand-mark">Bb</div>
-      <div>
-        <div class="brand-name">${PLAYER_DISPLAY_NAME}</div>
-        <div class="brand-sub">Chess.com analytics</div>
-      </div>
+  <header id="kpi-strip" class="kpi-strip">
+    <div class="strip-profile-links">
+      <a id="profile-link" class="strip-platform-label" href="${PLAYER_PROFILE_URL}" target="_blank" rel="noopener">Chess.com</a>
     </div>
-    <form class="analysis-form topbar-form" data-analysis-form hidden>
+    <div class="kpi kpi-sep"></div>
+    <div id="top-kpis" class="strip-kpis">
+      <div class="kpi kpi-active"><span class="kpi-label">Player</span><span class="kpi-value">${PLAYER_DISPLAY_NAME}</span></div>
+      <div class="kpi"><span class="kpi-label">Format</span><span class="kpi-value">${titleCase(DEFAULT_TIME_CLASS)}</span></div>
+      <div class="kpi"><span class="kpi-label">Status</span><span class="kpi-value">Ready</span></div>
+    </div>
+    <form class="analysis-form topbar-form" data-analysis-form>
       <label class="handle-field">
         <span>Handle</span>
         <input name="username" autocomplete="off" spellcheck="false" value="${DEFAULT_USERNAME}" placeholder="${DEFAULT_USERNAME}" required />
@@ -155,14 +157,10 @@ app.innerHTML = `
     </form>
   </header>
 
-  <main class="shell">
-    <section class="entry-view" id="entry-view">
-      <div class="entry-panel">
-        <div class="entry-copy">
-          <p class="eyebrow">${DEFAULT_USERNAME}</p>
-          <h1>${PLAYER_DISPLAY_NAME} chess dashboard.</h1>
-          <p>Start with Bodega Ben's public Chess.com games, or enter another handle.</p>
-        </div>
+  <main>
+    <section id="entry-view" class="entry-view">
+      <h2>Analyze player <small>enter a Chess.com handle to generate the dashboard</small></h2>
+      <div class="entry-grid">
         <form class="entry-form" data-analysis-form>
           <label class="entry-handle">
             <span>Chess.com handle</span>
@@ -186,84 +184,74 @@ app.innerHTML = `
             <button class="primary-button entry-button" type="submit">Analyze player</button>
           </div>
         </form>
-        <div class="entry-signals">
-          <span><strong>Ratings</strong><small>Current</small></span>
-          <span><strong>Form</strong><small>Recent</small></span>
-          <span><strong>Openings</strong><small>Observed</small></span>
-          <span><strong>Losses</strong><small>Review</small></span>
+        <div class="behavior-grid entry-signals">
+          <div class="behavior-card"><div class="bh-label">Ratings</div><div class="bh-value">Current</div><div class="bh-sub">Chess.com stats</div></div>
+          <div class="behavior-card"><div class="bh-label">Openings</div><div class="bh-value">Observed</div><div class="bh-sub">White and Black tables</div></div>
+          <div class="behavior-card"><div class="bh-label">Losses</div><div class="bh-value">Review</div><div class="bh-sub">Recent failure patterns</div></div>
         </div>
+        <aside class="entry-board-wrap">
+          <div id="entry-board" class="board-large entry-board"></div>
+          <div class="board-meta entry-board-meta">
+            <div class="name">${PLAYER_DISPLAY_NAME}</div>
+            <div class="stats"><a href="${PLAYER_PROFILE_URL}" target="_blank" rel="noopener">Chess.com profile</a></div>
+          </div>
+        </aside>
       </div>
-      <aside class="entry-board-wrap">
-        <div id="entry-board" class="entry-board"></div>
-        <div class="entry-board-meta">
-          <strong>${PLAYER_DISPLAY_NAME}</strong>
-          <a href="${PLAYER_PROFILE_URL}" target="_blank" rel="noopener">Chess.com profile</a>
-        </div>
-      </aside>
     </section>
 
     <section id="dashboard-view" class="dashboard-view" hidden>
       <section class="status-band" id="status-band">
-        <div>
-          <h1>Analyzing</h1>
-          <p id="status-copy">Preparing dashboard.</p>
-        </div>
+        <h2 id="status-title">Analyzing <small id="status-copy">Preparing dashboard.</small></h2>
         <div class="status-meta" id="status-meta"></div>
       </section>
 
-      <section class="kpi-grid" id="kpi-grid"></section>
+      <section id="plan-block">
+        <h2>Plan &amp; adherence <small>observed mode · recommendations from public games</small></h2>
+        <div class="plan-grid" id="recommendations"></div>
+      </section>
 
-      <section class="main-grid">
-        <div class="left-flow">
-          <section class="panel">
-            <div class="panel-head">
-              <h2>Recommendations</h2>
-              <span id="recommendation-count"></span>
-            </div>
-            <div class="recommendations" id="recommendations"></div>
-          </section>
+      <section id="move-quality-block">
+        <h2>Move quality <small>metadata pass · engine analysis deferred</small></h2>
+        <div id="move-quality-cards" class="behavior-grid"></div>
+      </section>
 
-          <section class="panel">
-            <div class="panel-head">
-              <h2>Opening families</h2>
-              <div class="table-tools">
-                <button class="side-filter active" data-side="all" type="button">All</button>
-                <button class="side-filter" data-side="white" type="button">White</button>
-                <button class="side-filter" data-side="black" type="button">Black</button>
-              </div>
-            </div>
-            <div class="opening-table" id="opening-table"></div>
-          </section>
+      <section id="move-quality-by-format">
+        <h2>By format <small>ratings per time class</small></h2>
+        <div id="format-table" class="table-scroll"></div>
+      </section>
 
-          <section class="panel">
-            <div class="panel-head">
-              <h2>Recent losses</h2>
-              <span id="loss-count"></span>
-            </div>
-            <div class="loss-list" id="loss-list"></div>
-          </section>
+      <section id="white-block">
+        <h2>White <small>click a row to see the position</small></h2>
+        <div class="sig-split">
+          <div class="table-scroll"><div id="white-opening-table" class="opening-table"></div></div>
+          <aside class="board-panel">
+            <div id="white-board" class="board-large"></div>
+            <div id="white-board-meta" class="board-meta"><span class="empty">White openings will appear here.</span></div>
+          </aside>
         </div>
+      </section>
 
-        <aside class="right-rail">
-          <section class="board-section">
-            <div id="board" class="board"></div>
-            <div id="board-meta" class="board-meta">Observed openings will appear here.</div>
-          </section>
+      <section id="black-block">
+        <h2>Black <small>click a row to see the position</small></h2>
+        <div class="sig-split">
+          <div class="table-scroll"><div id="black-opening-table" class="opening-table"></div></div>
+          <aside class="board-panel">
+            <div id="black-board" class="board-large"></div>
+            <div id="black-board-meta" class="board-meta"><span class="empty">Black openings will appear here.</span></div>
+          </aside>
+        </div>
+      </section>
 
-          <section class="panel compact">
-            <div class="panel-head">
-              <h2>Behavior</h2>
-            </div>
-            <div class="behavior-grid" id="behavior-grid"></div>
-          </section>
+      <section id="behavior-block">
+        <h2>Behavior — current state</h2>
+        <div id="behavior-grid" class="behavior-grid"></div>
+      </section>
 
-          <section class="panel compact">
-            <div class="panel-head">
-              <h2>Sessions</h2>
-            </div>
-            <div class="session-list" id="session-list"></div>
-          </section>
-        </aside>
+      <section id="drillin-section">
+        <h2>Drill in</h2>
+        <div id="drillin-cards" class="drillin-grid"></div>
+        <div id="loss-list" class="loss-list"></div>
+        <div id="session-list" class="session-list"></div>
       </section>
     </section>
   </main>
@@ -271,7 +259,6 @@ app.innerHTML = `
 
 entryBoard = createBoard('entry-board', START_FEN, 'white');
 wireForms();
-wireSideFilters();
 
 function createBoard(elementId: string, fen: string, orientation: 'white' | 'black') {
   const boardEl = document.querySelector<HTMLElement>(`#${elementId}`);
@@ -288,8 +275,11 @@ function createBoard(elementId: string, fen: string, orientation: 'white' | 'bla
 }
 
 function ensureDashboardBoard() {
-  if (!board) {
-    board = createBoard('board', START_FEN, 'white');
+  if (!dashboardBoards.white) {
+    dashboardBoards.white = createBoard('white-board', START_FEN, 'white');
+  }
+  if (!dashboardBoards.black) {
+    dashboardBoards.black = createBoard('black-board', START_FEN, 'black');
   }
 }
 
@@ -304,16 +294,6 @@ function wireForms() {
       if (!username) return;
       syncForms(username, timeClass, maxArchives);
       await startAnalysis(username, timeClass, maxArchives);
-    });
-  });
-}
-
-function wireSideFilters() {
-  document.querySelectorAll<HTMLButtonElement>('.side-filter').forEach((button) => {
-    button.addEventListener('click', () => {
-      document.querySelectorAll('.side-filter').forEach((item) => item.classList.remove('active'));
-      button.classList.add('active');
-      renderOpenings(activePayload, button.dataset.side || 'all');
     });
   });
 }
@@ -353,7 +333,7 @@ async function pollJob(jobId: string) {
       throw new Error(await response.text());
     }
     const job = (await response.json()) as AnalysisJob;
-    setStatus(statusTitle(job.status), job.message, job.username);
+    setStatus(statusTitle(job.status), job.message, '');
     if (job.status === 'complete' && job.result) {
       activePayload = job.result;
       renderDashboard(job.result);
@@ -370,22 +350,30 @@ function renderDashboard(payload: DashboardPayload) {
   showDashboardView();
   setStatus(`${playerLabel(payload.username)} ${titleCase(payload.time_class)}`, 'Dashboard generated from public Chess.com games.', payload.source.profile_url);
   renderKpis(payload);
+  renderMoveQuality(payload);
+  renderFormatTable(payload);
   renderRecommendations(payload);
-  renderOpenings(payload, activeSideFilter());
+  renderOpeningTable(payload, 'white');
+  renderOpeningTable(payload, 'black');
   renderLosses(payload);
   renderBehavior(payload);
   renderSessions(payload);
+  renderDrillIn(payload);
 
-  const firstOpening = payload.openings.find((row) => row.representative_fen);
-  if (firstOpening) {
-    selectOpening(firstOpening);
+  const firstWhite = payload.openings.find((row) => row.side === 'white' && row.representative_fen);
+  const firstBlack = payload.openings.find((row) => row.side === 'black' && row.representative_fen);
+  if (firstWhite) {
+    selectOpening(firstWhite);
+  }
+  if (firstBlack) {
+    selectOpening(firstBlack);
   }
 }
 
 function renderLoadingState() {
-  const kpiGrid = document.querySelector('#kpi-grid');
-  if (kpiGrid) {
-    kpiGrid.innerHTML = [
+  const topKpis = document.querySelector('#top-kpis');
+  if (topKpis) {
+    topKpis.innerHTML = [
       kpiCard('Rating', '--', 'Fetching'),
       kpiCard('Recent form', '--', 'Computing'),
       kpiCard('Games', '--', 'Parsing archives'),
@@ -394,77 +382,133 @@ function renderLoadingState() {
   }
   const recommendations = document.querySelector('#recommendations');
   if (recommendations) recommendations.innerHTML = '';
-  const openingTable = document.querySelector('#opening-table');
-  if (openingTable) openingTable.innerHTML = '';
+  const whiteTable = document.querySelector('#white-opening-table');
+  if (whiteTable) whiteTable.innerHTML = '';
+  const blackTable = document.querySelector('#black-opening-table');
+  if (blackTable) blackTable.innerHTML = '';
+  const formatTable = document.querySelector('#format-table');
+  if (formatTable) formatTable.innerHTML = '';
+  const moveQuality = document.querySelector('#move-quality-cards');
+  if (moveQuality) moveQuality.innerHTML = '';
+  const drillIn = document.querySelector('#drillin-cards');
+  if (drillIn) drillIn.innerHTML = '';
   const lossList = document.querySelector('#loss-list');
   if (lossList) lossList.innerHTML = '';
   const behavior = document.querySelector('#behavior-grid');
   if (behavior) behavior.innerHTML = '';
   const sessions = document.querySelector('#session-list');
   if (sessions) sessions.innerHTML = '';
-  const recommendationCount = document.querySelector('#recommendation-count');
-  if (recommendationCount) recommendationCount.textContent = '';
-  const lossCount = document.querySelector('#loss-count');
-  if (lossCount) lossCount.textContent = '';
-  const boardMeta = document.querySelector('#board-meta');
-  if (boardMeta) boardMeta.textContent = 'Opening board will populate when the analysis completes.';
-  if (board?.set) {
-    board.set({ fen: START_FEN, orientation: 'white' });
+  const whiteMeta = document.querySelector('#white-board-meta');
+  if (whiteMeta) whiteMeta.innerHTML = '<span class="empty">White openings will appear here.</span>';
+  const blackMeta = document.querySelector('#black-board-meta');
+  if (blackMeta) blackMeta.innerHTML = '<span class="empty">Black openings will appear here.</span>';
+  if (dashboardBoards.white?.set) {
+    dashboardBoards.white.set({ fen: START_FEN, orientation: 'white' });
+  }
+  if (dashboardBoards.black?.set) {
+    dashboardBoards.black.set({ fen: START_FEN, orientation: 'black' });
   }
 }
 
 function renderKpis(payload: DashboardPayload) {
-  const kpiGrid = document.querySelector('#kpi-grid');
-  if (!kpiGrid) return;
+  const topKpis = document.querySelector('#top-kpis');
+  if (!topKpis) return;
   const rating = payload.ratings.current == null ? '--' : String(payload.ratings.current);
   const delta = formatSigned(payload.recent_form.rating_delta);
-  kpiGrid.innerHTML = [
+  topKpis.innerHTML = [
     kpiCard('Rating', rating, 'Current'),
     kpiCard('Recent form', `${payload.recent_form.score_pct}%`, `${payload.recent_form.record} / ${delta}`),
     kpiCard('Games', String(payload.source.games_used), `${payload.source.archives_used} archives`),
+    kpiCard('Updated', new Date(payload.generated_at).toLocaleString(), 'Generated'),
     kpiCard('Move quality', titleCase(payload.move_quality.status), 'Engine pass later')
   ].join('');
+  const profileLink = document.querySelector<HTMLAnchorElement>('#profile-link');
+  if (profileLink) profileLink.href = payload.source.profile_url;
+}
+
+function renderMoveQuality(payload: DashboardPayload) {
+  const root = document.querySelector('#move-quality-cards');
+  if (!root) return;
+  const process = payload.behavior.process;
+  root.innerHTML = [
+    behaviorCard('Status', titleCase(payload.move_quality.status), payload.move_quality.summary),
+    behaviorCard('Clock move 10', process.median_clock_move_10 == null ? '--' : `${process.median_clock_move_10}s`, 'Median clock after move 10'),
+    behaviorCard('Clock move 20', process.median_clock_move_20 == null ? '--' : `${process.median_clock_move_20}s`, 'Median clock after move 20')
+  ].join('');
+}
+
+function renderFormatTable(payload: DashboardPayload) {
+  const root = document.querySelector('#format-table');
+  if (!root) return;
+  const rows = TIME_CLASSES
+    .filter((item) => payload.ratings.by_format[item] != null || item === payload.time_class)
+    .map((item) => {
+      const current = item === payload.time_class;
+      const rating = payload.ratings.by_format[item] == null ? '--' : String(payload.ratings.by_format[item]);
+      const games = current ? String(payload.source.games_used) : '--';
+      return `
+        <tr${current ? ' class="mqf-current"' : ''}>
+          <td>${titleCase(item)}${current ? ' ◂' : ''}</td>
+          <td>${rating}</td>
+          <td>${games}</td>
+          <td>${current ? `${payload.source.archives_used} archives` : '--'}</td>
+        </tr>
+      `;
+    })
+    .join('');
+  root.innerHTML = `
+    <table class="mqf-table">
+      <thead><tr><th>Format</th><th>Rating</th><th>Games</th><th>Sample</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
 }
 
 function renderRecommendations(payload: DashboardPayload) {
   const root = document.querySelector('#recommendations');
-  const count = document.querySelector('#recommendation-count');
   if (!root) return;
-  if (count) count.textContent = `${payload.recommendations.length}`;
   root.innerHTML = payload.recommendations
     .map((item) => `
-      <article class="recommendation">
-        <h3>${escapeHtml(item.title)}</h3>
-        <p>${escapeHtml(item.reason)}</p>
-        <div>${escapeHtml(item.action)}</div>
+      <article class="plan-card severity-green">
+        <div class="plan-head">
+          <span class="plan-vs">Study next</span>
+          <span class="plan-name">${escapeHtml(item.title)}</span>
+        </div>
+        <div class="plan-counts">${escapeHtml(item.reason)}</div>
+        <p class="plan-plan">${escapeHtml(item.action)}</p>
       </article>
     `)
     .join('');
 }
 
-function renderOpenings(payload: DashboardPayload | null, side: string) {
-  const root = document.querySelector('#opening-table');
+function renderOpeningTable(payload: DashboardPayload | null, side: 'white' | 'black') {
+  const root = document.querySelector(`#${side}-opening-table`);
   if (!root) return;
   if (!payload) {
     root.innerHTML = '';
     return;
   }
-  const rows = payload.openings.filter((row) => side === 'all' || row.side === side).slice(0, 18);
+  const rows = payload.openings.filter((row) => row.side === side).slice(0, 18);
+  if (rows.length === 0) {
+    root.innerHTML = `<div class="table-empty">No ${side} openings in this sample.</div>`;
+    return;
+  }
   root.innerHTML = `
     <div class="opening-header">
-      <span>Opening</span><span>Side</span><span>Games</span><span>Score</span><span>Rating</span><span>Form</span>
+      <span>Opening</span><span>Games</span><span>Score</span><span>Rating</span><span>Flag</span><span>Mate</span><span>Form</span>
     </div>
     ${rows
       .map((row, index) => `
-        <button class="opening-row" type="button" data-index="${index}" data-family="${escapeHtml(row.family)}">
+        <button class="opening-row" type="button" data-index="${index}" data-side="${row.side}" data-family="${escapeHtml(row.family)}">
           <span>
             <strong>${escapeHtml(row.family)}</strong>
             <small>${escapeHtml(row.eco || row.sample_moves || 'Unclassified')}</small>
           </span>
-          <span>${titleCase(row.side)}</span>
           <span>${row.games}</span>
           <span>${row.score_pct}%</span>
           <span>${formatSigned(row.rating_delta)}</span>
+          <span>${row.timeout_losses}</span>
+          <span>${row.mate_losses}</span>
           <span class="form-strip">${formStrip(row.form)}</span>
         </button>
       `)
@@ -476,17 +520,24 @@ function renderOpenings(payload: DashboardPayload | null, side: string) {
 }
 
 function selectOpening(row: OpeningRow) {
+  const board = dashboardBoards[row.side];
   if (row.representative_fen && board?.set) {
     board.set({
       fen: row.representative_fen,
       orientation: row.side
     });
   }
-  const meta = document.querySelector('#board-meta');
+  const meta = document.querySelector(`#${row.side}-board-meta`);
   if (!meta) return;
   meta.innerHTML = `
-    <div class="board-title">${escapeHtml(row.family)}</div>
-    <div class="board-sub">${titleCase(row.side)} / ${row.games} games / ${row.score_pct}% score</div>
+    <div class="name">${escapeHtml(row.family)}</div>
+    <div class="stats">${titleCase(row.side)} / ${row.games} games / ${row.score_pct}% score / ${formatSigned(row.rating_delta)} rating</div>
+    <div class="detail">
+      <div class="row"><span class="k">Record</span><span class="v">${escapeHtml(row.record)}</span></div>
+      <div class="row"><span class="k">Avg opponent</span><span class="v">${row.avg_opp_rating}</span></div>
+      <div class="row"><span class="k">Timeout losses</span><span class="v">${row.timeout_losses}</span></div>
+      <div class="row"><span class="k">Mate losses</span><span class="v">${row.mate_losses}</span></div>
+    </div>
     <div class="board-line">${escapeHtml(row.sample_moves || 'No opening move line available.')}</div>
   `;
 }
@@ -517,12 +568,27 @@ function renderBehavior(payload: DashboardPayload) {
   if (!root) return;
   const process = payload.behavior.process;
   root.innerHTML = [
-    metricCell('Loss rate', `${payload.behavior.loss_rate_pct}%`, `${payload.behavior.sample_games} games`),
-    metricCell('Timeout loss', `${payload.behavior.timeout_loss_pct}%`, 'Of losses'),
-    metricCell('Mate loss', `${payload.behavior.mate_loss_pct}%`, 'Of losses'),
-    metricCell('Loss streak', String(payload.behavior.longest_recent_loss_streak), 'Recent max'),
-    metricCell('Clock move 10', process.median_clock_move_10 == null ? '--' : `${process.median_clock_move_10}s`, 'Median'),
-    metricCell('Clock move 20', process.median_clock_move_20 == null ? '--' : `${process.median_clock_move_20}s`, 'Median')
+    behaviorCard('Loss rate', `${payload.behavior.loss_rate_pct}%`, `${payload.behavior.sample_games} games`),
+    behaviorCard('Timeout loss', `${payload.behavior.timeout_loss_pct}%`, 'Of losses'),
+    behaviorCard('Mate loss', `${payload.behavior.mate_loss_pct}%`, 'Of losses'),
+    behaviorCard('Loss streak', String(payload.behavior.longest_recent_loss_streak), 'Recent max'),
+    behaviorCard('Clock move 10', process.median_clock_move_10 == null ? '--' : `${process.median_clock_move_10}s`, 'Median'),
+    behaviorCard('Clock move 20', process.median_clock_move_20 == null ? '--' : `${process.median_clock_move_20}s`, 'Median')
+  ].join('');
+}
+
+function renderDrillIn(payload: DashboardPayload) {
+  const root = document.querySelector('#drillin-cards');
+  if (!root) return;
+  const worstOpening = payload.openings[0];
+  const recentTimeouts = payload.recent_losses.filter((loss) => loss.loss_type === 'timeout').length;
+  const recentMates = payload.recent_losses.filter((loss) => loss.loss_type === 'checkmated').length;
+  const lastSession = payload.behavior.sessions[payload.behavior.sessions.length - 1];
+  root.innerHTML = [
+    drillCard('Openings', worstOpening ? worstOpening.family : 'No sample', worstOpening ? `${worstOpening.games} games / ${worstOpening.score_pct}% score` : 'Run a larger sample'),
+    drillCard('Recent losses', String(payload.recent_losses.length), `${recentTimeouts} timeout, ${recentMates} checkmated`, payload.recent_losses.length > 0),
+    drillCard('Process', payload.behavior.process.games_with_clock_data ? `${payload.behavior.process.games_with_clock_data} games` : 'No clock', 'Clock data coverage'),
+    drillCard('Last session', lastSession ? formatSigned(lastSession.rating_delta) : '--', lastSession ? `${lastSession.games} games / ${lastSession.record}` : 'No session data')
   ].join('');
 }
 
@@ -545,29 +611,41 @@ function renderSessions(payload: DashboardPayload) {
 
 function kpiCard(label: string, value: string, sub: string) {
   return `
-    <article class="kpi-card">
-      <span>${escapeHtml(label)}</span>
-      <strong>${escapeHtml(value)}</strong>
-      <small>${escapeHtml(sub)}</small>
-    </article>
+    <div class="kpi">
+      <span class="kpi-label">${escapeHtml(label)}</span>
+      <span class="kpi-value${label === 'Recent form' && value !== '--' && Number.parseFloat(value) >= 50 ? ' accent' : ''}">${escapeHtml(value)}</span>
+      <span class="kpi-sub">${escapeHtml(sub)}</span>
+    </div>
   `;
 }
 
-function metricCell(label: string, value: string, sub: string) {
+function behaviorCard(label: string, value: string, sub: string) {
   return `
-    <div class="metric-cell">
-      <span>${escapeHtml(label)}</span>
-      <strong>${escapeHtml(value)}</strong>
-      <small>${escapeHtml(sub)}</small>
+    <div class="behavior-card">
+      <div class="bh-label">${escapeHtml(label)}</div>
+      <div class="bh-value">${escapeHtml(value)}</div>
+      <div class="bh-sub">${escapeHtml(sub)}</div>
+    </div>
+  `;
+}
+
+function drillCard(label: string, headline: string, sub: string, alert = false) {
+  return `
+    <div class="card${alert ? ' alert' : ''}">
+      <div class="label">${escapeHtml(label)}</div>
+      <div class="headline">${escapeHtml(headline)}</div>
+      <div class="sub">${escapeHtml(sub)}</div>
     </div>
   `;
 }
 
 function setStatus(title: string, copy: string, profileUrl: string) {
-  const titleEl = document.querySelector('#status-band h1');
+  const titleEl = document.querySelector('#status-title');
   const copyEl = document.querySelector('#status-copy');
   const meta = document.querySelector('#status-meta');
-  if (titleEl) titleEl.textContent = title;
+  if (titleEl) {
+    titleEl.innerHTML = `${escapeHtml(title)} <small id="status-copy">${escapeHtml(copy)}</small>`;
+  }
   if (copyEl) copyEl.textContent = copy;
   if (meta) {
     meta.innerHTML = profileUrl
@@ -588,10 +666,8 @@ function setBusy(isBusy: boolean) {
 function showDashboardView() {
   const entryView = document.querySelector<HTMLElement>('#entry-view');
   const dashboardView = document.querySelector<HTMLElement>('#dashboard-view');
-  const topbarForm = document.querySelector<HTMLFormElement>('.topbar-form');
   if (entryView) entryView.hidden = true;
   if (dashboardView) dashboardView.hidden = false;
-  if (topbarForm) topbarForm.hidden = false;
   ensureDashboardBoard();
 }
 
@@ -604,10 +680,6 @@ function syncForms(username: string, timeClass: TimeClass, maxArchives: number) 
     if (monthsInput) monthsInput.value = String(maxArchives);
     if (timeInput) timeInput.checked = true;
   });
-}
-
-function activeSideFilter() {
-  return document.querySelector<HTMLElement>('.side-filter.active')?.dataset.side || 'all';
 }
 
 function formStrip(form: string[]) {
