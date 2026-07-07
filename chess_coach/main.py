@@ -10,9 +10,10 @@ from pydantic import BaseModel, Field
 
 from .config import FRONTEND_DIST, TIME_CLASSES
 from .jobs import JobManager
+from .usernames import normalize_chesscom_username
 
 
-app = FastAPI(title="Bodega Ben Chess Dashboard API", version="0.1.0")
+app = FastAPI(title="Chess Coach API", version="0.1.0")
 jobs = JobManager()
 
 app.add_middleware(
@@ -39,8 +40,12 @@ def health() -> dict:
 def create_analysis(request: AnalysisRequest) -> dict:
     if request.time_class not in TIME_CLASSES:
         raise HTTPException(status_code=400, detail=f"Unsupported time_class: {request.time_class}")
+    try:
+        username = normalize_chesscom_username(request.username)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     job = jobs.start(
-        username=request.username,
+        username=username,
         time_class=request.time_class,
         max_archives=request.max_archives,
         force=request.force,
@@ -60,6 +65,10 @@ def get_analysis(job_id: str) -> dict:
 def get_cached_result(username: str, time_class: str = "bullet") -> dict:
     if time_class not in TIME_CLASSES:
         raise HTTPException(status_code=400, detail=f"Unsupported time_class: {time_class}")
+    try:
+        username = normalize_chesscom_username(username)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     result = jobs.cached_result(username=username, time_class=time_class)
     if result is None:
         raise HTTPException(status_code=404, detail="No cached analysis for this user and time class")
@@ -78,9 +87,9 @@ def index():
     return HTMLResponse(
         """
         <!doctype html>
-        <title>Bodega Ben Chess Dashboard</title>
+        <title>Chess Coach</title>
         <main style="font-family: system-ui; padding: 2rem; max-width: 720px">
-          <h1>Bodega Ben Chess Dashboard API is running</h1>
+          <h1>Chess Coach API is running</h1>
           <p>Build the frontend with <code>cd frontend && npm run build</code>,
           or run Vite at <code>http://localhost:5173</code>.</p>
         </main>

@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: chess-coach-bodega-ben
+    name: chess-coach
     runtime: docker
     plan: free
     region: oregon

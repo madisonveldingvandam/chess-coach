@@ -12,6 +12,7 @@ from .chesscom import ChessComClient
 from .config import DATA_DIR
 from .metrics import accept_game, compute_dashboard
 from .pgn import parse_game
+from .usernames import normalize_chesscom_username
 
 
 @dataclass
@@ -41,9 +42,10 @@ class JobManager:
         self.lock = Lock()
 
     def start(self, *, username: str, time_class: str, max_archives: int, force: bool) -> AnalysisJob:
+        normalized_username = normalize_chesscom_username(username)
         job = AnalysisJob(
             id=uuid4().hex,
-            username=username.strip(),
+            username=normalized_username,
             time_class=time_class,
             max_archives=max(1, min(max_archives, 36)),
             force=force,
@@ -71,13 +73,14 @@ class JobManager:
             self._mark(job, "running", "Fetching Chess.com profile and archive index")
             profile = self.client.fetch_profile(job.username)
             stats = self.client.fetch_stats(job.username)
-            archive_urls = self.client.fetch_archives_index(job.username)
-            selected = archive_urls[-job.max_archives :]
-
+            self._mark(job, "running", f"Fetching up to {job.max_archives} recent archives")
+            archives = self.client.fetch_recent_archives(
+                job.username,
+                max_archives=job.max_archives,
+                force=job.force,
+            )
             all_games: list[dict] = []
-            for index, archive_url in enumerate(selected, start=1):
-                self._mark(job, "running", f"Fetching archive {index} of {len(selected)}")
-                archive = self.client.fetch_archive(archive_url, username=job.username, force=job.force)
+            for archive in archives:
                 all_games.extend(archive.get("games", []))
 
             self._mark(job, "running", "Parsing games and computing metrics")
@@ -89,7 +92,7 @@ class JobManager:
                 time_class=job.time_class,
                 profile=profile,
                 stats=stats,
-                archive_count=len(selected),
+                archive_count=len(archives),
             )
 
             path = self._result_path(job.username, job.time_class)
@@ -100,7 +103,7 @@ class JobManager:
             self._fail(job, str(exc))
 
     def _result_path(self, username: str, time_class: str) -> Path:
-        safe_username = username.lower().replace("/", "_")
+        safe_username = normalize_chesscom_username(username)
         return self.data_dir / "results" / safe_username / f"{time_class}.json"
 
     def _mark(self, job: AnalysisJob, status: str, message: str) -> None:

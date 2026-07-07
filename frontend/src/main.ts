@@ -107,13 +107,14 @@ type Recommendation = {
 };
 
 const START_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
-const DEFAULT_USERNAME = 'bodegaben';
-const PLAYER_DISPLAY_NAME = 'Bodega Ben';
-const PLAYER_PROFILE_URL = 'https://www.chess.com/member/bodegaben';
+const DEFAULT_USERNAME = '';
+const USERNAME_PLACEHOLDER = 'chess.com/member/username';
+const CHESSCOM_HOME_URL = 'https://www.chess.com';
 const DEFAULT_TIME_CLASS: TimeClass = 'blitz';
 const DEFAULT_ARCHIVE_MONTHS = 6;
 const TIME_CLASSES: TimeClass[] = ['bullet', 'blitz', 'rapid', 'daily'];
 const STATIC_DASHBOARD_URL = `${import.meta.env.BASE_URL}data/default-dashboard.json`;
+const CHESSCOM_USERNAME_RE = /^[A-Za-z0-9_-]{1,64}$/;
 
 const app = document.querySelector<HTMLDivElement>('#app');
 if (!app) {
@@ -128,18 +129,18 @@ let staticPayload: DashboardPayload | null | undefined;
 app.innerHTML = `
   <header id="kpi-strip" class="kpi-strip">
     <div class="strip-profile-links">
-      <a id="profile-link" class="strip-platform-label" href="${PLAYER_PROFILE_URL}" target="_blank" rel="noopener">Chess.com</a>
+      <a id="profile-link" class="strip-platform-label" href="${CHESSCOM_HOME_URL}" target="_blank" rel="noopener">Chess.com</a>
     </div>
     <div class="kpi kpi-sep"></div>
     <div id="top-kpis" class="strip-kpis">
-      <div class="kpi kpi-active"><span class="kpi-label">Player</span><span class="kpi-value">${PLAYER_DISPLAY_NAME}</span></div>
+      <div class="kpi kpi-active"><span class="kpi-label">Player</span><span class="kpi-value">Ready</span></div>
       <div class="kpi"><span class="kpi-label">Format</span><span class="kpi-value">${titleCase(DEFAULT_TIME_CLASS)}</span></div>
       <div class="kpi"><span class="kpi-label">Status</span><span class="kpi-value">Ready</span></div>
     </div>
     <form class="analysis-form topbar-form" data-analysis-form>
       <label class="handle-field">
-        <span>Handle</span>
-        <input name="username" autocomplete="off" spellcheck="false" value="${DEFAULT_USERNAME}" placeholder="${DEFAULT_USERNAME}" required />
+        <span>Profile</span>
+        <input name="username" autocomplete="off" spellcheck="false" value="${DEFAULT_USERNAME}" placeholder="${USERNAME_PLACEHOLDER}" required />
       </label>
       <fieldset class="segment" aria-label="Time class">
         ${TIME_CLASSES
@@ -161,12 +162,12 @@ app.innerHTML = `
 
   <main>
     <section id="entry-view" class="entry-view">
-      <h2>Analyze player <small>enter a Chess.com handle to generate the dashboard</small></h2>
+      <h2>Analyze player <small>Chess.com profile or handle</small></h2>
       <div class="entry-grid">
         <form class="entry-form" data-analysis-form>
           <label class="entry-handle">
-            <span>Chess.com handle</span>
-            <input name="username" autocomplete="off" spellcheck="false" value="${DEFAULT_USERNAME}" placeholder="${DEFAULT_USERNAME}" required autofocus />
+            <span>Chess.com profile</span>
+            <input name="username" autocomplete="off" spellcheck="false" value="${DEFAULT_USERNAME}" placeholder="${USERNAME_PLACEHOLDER}" required autofocus />
           </label>
           <fieldset class="segment entry-segment" aria-label="Time class">
             ${TIME_CLASSES
@@ -194,8 +195,8 @@ app.innerHTML = `
         <aside class="entry-board-wrap">
           <div id="entry-board" class="board-large entry-board"></div>
           <div class="board-meta entry-board-meta">
-            <div class="name">${PLAYER_DISPLAY_NAME}</div>
-            <div class="stats"><a href="${PLAYER_PROFILE_URL}" target="_blank" rel="noopener">Chess.com profile</a></div>
+            <div class="name">Chess Coach</div>
+            <div class="stats">Chess.com profile analysis</div>
           </div>
         </aside>
       </div>
@@ -291,10 +292,15 @@ function wireForms() {
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
       const formData = new FormData(form);
-      const username = String(formData.get('username') || '').trim();
+      const username = normalizeProfileInput(String(formData.get('username') || ''));
       const timeClass = String(formData.get('time_class') || 'bullet') as TimeClass;
       const maxArchives = Number(formData.get('max_archives') || DEFAULT_ARCHIVE_MONTHS);
       if (!username) return;
+      if (!CHESSCOM_USERNAME_RE.test(username)) {
+        showDashboardView();
+        setStatus('Invalid profile', 'Enter a valid Chess.com handle or member profile URL.', '');
+        return;
+      }
       syncForms(username, timeClass, maxArchives);
       await startAnalysis(username, timeClass, maxArchives);
     });
@@ -337,7 +343,7 @@ async function startAnalysis(username: string, timeClass: TimeClass, maxArchives
       return;
     }
     const reason = error instanceof Error ? error.message : String(error);
-    setStatus('Backend unavailable', `${reason}. Static Pages supports Bodega Ben ${titleCase(DEFAULT_TIME_CLASS)} only.`, '');
+    setStatus('Backend unavailable', `${reason}. Live profile analysis requires the Chess Coach backend.`, '');
   } finally {
     setBusy(false);
   }
@@ -747,7 +753,28 @@ function titleCase(value: string) {
 }
 
 function playerLabel(username: string) {
-  return username.toLowerCase() === DEFAULT_USERNAME ? PLAYER_DISPLAY_NAME : username;
+  return username;
+}
+
+function normalizeProfileInput(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+
+  const urlCandidate = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  try {
+    const url = new URL(urlCandidate);
+    const hostname = url.hostname.toLowerCase();
+    if (hostname === 'chess.com' || hostname === 'www.chess.com') {
+      const parts = url.pathname.split('/').filter(Boolean);
+      if (parts.length >= 2 && parts[0].toLowerCase() === 'member') {
+        return parts[1].replace(/^@/, '').toLowerCase();
+      }
+    }
+  } catch {
+    // Fall back to treating the input as a raw handle.
+  }
+
+  return trimmed.replace(/^@/, '').replace(/^\/+|\/+$/g, '').toLowerCase();
 }
 
 function formatSigned(value: number | null) {

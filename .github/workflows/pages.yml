@@ -1,4 +1,4 @@
-name: Refresh + deploy static dashboard
+name: Test + deploy Chess Coach frontend
 
 on:
   schedule:
@@ -45,24 +45,26 @@ jobs:
         working-directory: frontend
         run: npm ci
 
-      - name: Cache Chess.com archives
-        uses: actions/cache@v4
-        with:
-          path: data/chesscom
-          key: chesscom-archives-${{ github.run_id }}
-          restore-keys: |
-            chesscom-archives-
-
       - name: Run backend tests
         run: uv run pytest
 
-      - name: Generate static dashboard data
-        run: uv run python scripts/generate_static_dashboard.py --username bodegaben --time-class blitz --max-archives 6
+      - name: Generate optional static dashboard data
+        env:
+          STATIC_USERNAME: ${{ vars.CHESS_COACH_STATIC_USERNAME }}
+          STATIC_TIME_CLASS: ${{ vars.CHESS_COACH_STATIC_TIME_CLASS || 'blitz' }}
+          STATIC_ARCHIVE_MONTHS: ${{ vars.CHESS_COACH_STATIC_ARCHIVE_MONTHS || '6' }}
+        run: |
+          if [ -n "$STATIC_USERNAME" ]; then
+            uv run python scripts/generate_static_dashboard.py \
+              --username "$STATIC_USERNAME" \
+              --time-class "$STATIC_TIME_CLASS" \
+              --max-archives "$STATIC_ARCHIVE_MONTHS"
+          fi
 
       - name: Build frontend for GitHub Pages
         working-directory: frontend
         env:
-          VITE_BASE_PATH: /chess-coach-bodega-ben/
+          VITE_BASE_PATH: /${{ github.event.repository.name }}/
         run: npm run build
 
       - uses: actions/configure-pages@v5

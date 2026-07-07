@@ -2,13 +2,13 @@
 
 ## Product Boundary
 
-`chess-coach-bodega-ben` is a new standalone repo and app. It should continue
-to run if the old `chess-tracker` directory is deleted.
+`chess-coach` is a standalone Chess.com analytics app. It should continue to
+run if older personal chess projects are deleted.
 
-The MVP is branded around Bodega Ben (`bodegaben`) and defaults to Blitz over a
-six-month sample while still supporting arbitrary public Chess.com usernames.
-It starts without accounts, payments, email, OAuth, a polished repertoire
-editor, or multi-user saved workspaces.
+The MVP is generic: users enter any public Chess.com handle or member profile
+URL, choose a time class and archive window, and receive a dashboard derived
+from public games. It starts without accounts, payments, email, OAuth, a
+polished repertoire editor, or multi-user saved workspaces.
 
 ## Minimum Viable Stack
 
@@ -22,9 +22,9 @@ editor, or multi-user saved workspaces.
 
 ## Core Flow
 
-1. User enters a Chess.com handle and selects time class/month window.
-2. Frontend calls `POST /api/analyses`.
-3. Backend returns a job id immediately.
+1. User enters a Chess.com handle or member profile URL and selects time class/month window.
+2. Frontend normalizes the entry to a Chess.com username and calls `POST /api/analyses`.
+3. Backend validates the username and returns a job id immediately.
 4. Frontend polls `GET /api/analyses/{job_id}`.
 5. Worker fetches/caches public Chess.com archives, parses games, computes
    dashboard JSON, and stores the result.

@@ -13,6 +13,7 @@ from chess_coach.chesscom import ChessComClient
 from chess_coach.config import DATA_DIR
 from chess_coach.metrics import accept_game, compute_dashboard
 from chess_coach.pgn import parse_game
+from chess_coach.usernames import normalize_chesscom_username
 
 
 def generate_static_dashboard(
@@ -23,15 +24,14 @@ def generate_static_dashboard(
     output: Path,
     force: bool,
 ) -> dict:
+    username = normalize_chesscom_username(username)
     client = ChessComClient(DATA_DIR)
     profile = client.fetch_profile(username)
     stats = client.fetch_stats(username)
-    archive_urls = client.fetch_archives_index(username)
-    selected = archive_urls[-max_archives:]
+    archives = client.fetch_recent_archives(username, max_archives=max_archives, force=force)
 
     games: list[dict] = []
-    for archive_url in selected:
-        archive = client.fetch_archive(archive_url, username=username, force=force)
+    for archive in archives:
         games.extend(archive.get("games", []))
 
     matching_games = [game for game in games if accept_game(game, time_class)]
@@ -42,7 +42,7 @@ def generate_static_dashboard(
         time_class=time_class,
         profile=profile,
         stats=stats,
-        archive_count=len(selected),
+        archive_count=len(archives),
     )
 
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -51,8 +51,8 @@ def generate_static_dashboard(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Generate static Bodega Ben dashboard JSON.")
-    parser.add_argument("--username", default="bodegaben")
+    parser = argparse.ArgumentParser(description="Generate static Chess Coach dashboard JSON.")
+    parser.add_argument("--username", required=True, help="Chess.com handle or member profile URL")
     parser.add_argument("--time-class", default="blitz", choices=["bullet", "blitz", "rapid", "daily"])
     parser.add_argument("--max-archives", type=int, default=6)
     parser.add_argument("--output", type=Path, default=Path("frontend/public/data/default-dashboard.json"))

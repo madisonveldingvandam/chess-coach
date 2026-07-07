@@ -1,39 +1,18 @@
 # Deployment
 
-## GitHub Pages
-
-The public Bodega Ben site is designed to work like the original
-`chess-tracker` site: GitHub Actions refreshes public Chess.com data, builds a
-static dashboard, and deploys the finished frontend to GitHub Pages.
-
-Expected URL:
-
-https://madisonveldingvandam.github.io/chess-coach-bodega-ben/
-
-Workflow:
-
-- `.github/workflows/pages.yml`
-- Runs on push to `main`, every six hours, and manual dispatch.
-- Generates `frontend/public/data/default-dashboard.json` during the workflow.
-- Builds Vite with `VITE_BASE_PATH=/chess-coach-bodega-ben/`.
-- Uploads `frontend/dist` to GitHub Pages.
-
-The static Pages site is Bodega Ben-specific. It can show the live-handle form,
-but arbitrary handle analysis still requires the FastAPI backend deployment
-below.
-
 ## Render
 
-This repo is also configured for a Docker-based Render web service when live
-arbitrary-handle analysis is needed.
+Use the container deployment for the generic Chess Coach product. The frontend
+posts profile-analysis jobs to the FastAPI backend, so arbitrary Chess.com
+profile entry requires a running backend.
 
-Use this Blueprint link:
+Blueprint link after the repository is named `chess-coach`:
 
-https://render.com/deploy?repo=https://github.com/madisonveldingvandam/chess-coach-bodega-ben
+https://render.com/deploy?repo=https://github.com/madisonveldingvandam/chess-coach
 
 Expected service settings:
 
-- Name: `chess-coach-bodega-ben`
+- Name: `chess-coach`
 - Runtime: Docker
 - Plan: Free
 - Branch: `main`
@@ -48,3 +27,29 @@ persistent disk, then set `CHESS_COACH_DATA_DIR` to that disk path.
 
 Render provides the runtime `PORT` environment variable for web services. The
 Docker command binds Uvicorn to `0.0.0.0` and `${PORT:-10000}`.
+
+## GitHub Pages
+
+GitHub Pages can deploy the static frontend, but it cannot run live profile
+analysis jobs. Use it for a static shell or an optional pre-generated sample
+dashboard only.
+
+Expected URL after the repository is named `chess-coach`:
+
+https://madisonveldingvandam.github.io/chess-coach/
+
+Workflow:
+
+- `.github/workflows/pages.yml`
+- Runs on push to `main`, every six hours, and manual dispatch.
+- Runs backend tests.
+- Optionally generates `frontend/public/data/default-dashboard.json` when the
+  `CHESS_COACH_STATIC_USERNAME` repository variable is set.
+- Builds Vite with `VITE_BASE_PATH` set from the repository name.
+- Uploads `frontend/dist` to GitHub Pages.
+
+Optional repository variables:
+
+- `CHESS_COACH_STATIC_USERNAME`
+- `CHESS_COACH_STATIC_TIME_CLASS`
+- `CHESS_COACH_STATIC_ARCHIVE_MONTHS`
